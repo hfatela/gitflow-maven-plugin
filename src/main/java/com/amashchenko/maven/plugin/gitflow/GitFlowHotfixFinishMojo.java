@@ -99,7 +99,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
      *
      * @since 1.10.0
      */
-    @Parameter(property = "useSnapshotInHotfix", defaultValue = "false")
+    @Parameter(defaultValue = "false")
     protected boolean useSnapshotInHotfix;
 
     /** {@inheritDoc} */
