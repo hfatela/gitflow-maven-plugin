@@ -20,6 +20,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.maven.artifact.Artifact;
 import org.apache.maven.artifact.ArtifactUtils;
 import org.apache.maven.plugin.MojoExecutionException;
 import org.apache.maven.plugin.MojoFailureException;
@@ -32,23 +33,23 @@ import org.codehaus.plexus.util.cli.CommandLineException;
 
 /**
  * The git flow hotfix start mojo.
- * 
+ *
  */
 @Mojo(name = "hotfix-start", aggregator = true)
 public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
 
     /**
      * Whether to push to the remote.
-     * 
+     *
      * @since 1.6.0
      */
     @Parameter(property = "pushRemote", defaultValue = "false")
     private boolean pushRemote;
 
     /**
-     * Branch to start hotfix in non-interactive mode. Production branch or one of
-     * the support branches.
-     * 
+     * Branch to start hotfix in non-interactive mode. Production branch or one
+     * of the support branches.
+     *
      * @since 1.9.0
      */
     @Parameter(property = "fromBranch")
@@ -56,7 +57,7 @@ public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
 
     /**
      * Hotfix version to use in non-interactive mode.
-     * 
+     *
      * @since 1.9.0
      */
     @Parameter(property = "hotfixVersion")
@@ -64,12 +65,20 @@ public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
 
     /**
      * Whether this is use snapshot in hotfix.
-     * 
+     *
      * @since 1.10.0
      */
-    @Parameter(defaultValue = "false")
+    @Parameter(property = "useSnapshotInHotfix", defaultValue = "false")
     protected boolean useSnapshotInHotfix;
-    
+
+    /**
+     * Whether we use the support has a development branch
+     *
+     * @since 1.10.1
+     */
+    @Parameter(property = "useSupportHasDevelop", defaultValue = "false")
+    protected boolean useSupportHasDevelop;
+
     /** {@inheritDoc} */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -108,7 +117,7 @@ public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
                     StringBuilder str = new StringBuilder("Branches:")
                             .append(LS);
                     for (int i = 0; i < branches.length; i++) {
-                        str.append((i + 1) + ". " + branches[i] + LS);
+                        str.append(i + 1 + ". " + branches[i] + LS);
                         numberedList.add(String.valueOf(i + 1));
                     }
                     str.append("Choose branch to hotfix");
@@ -150,7 +159,11 @@ public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
             }
 
             // get current project version from pom
-            final String currentVersion = getCurrentProjectVersion();
+            String currentVersion = getCurrentProjectVersion();
+
+            if (ArtifactUtils.isSnapshot(currentVersion)) {
+                currentVersion = currentVersion.replace("-" + Artifact.SNAPSHOT_VERSION, "");
+            }
 
             // get default hotfix version
             final String defaultVersion = new GitFlowVersionInfo(currentVersion)
@@ -162,6 +175,7 @@ public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
             }
 
             String version = null;
+
             if (settings.isInteractiveMode()) {
                 try {
                     while (version == null) {
@@ -200,6 +214,7 @@ public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
 
             String hotfixBranchName = gitFlowConfig.getHotfixBranchPrefix()
                     + branchVersionPart;
+
             if (!gitFlowConfig.getProductionBranch().equals(branchName)) {
                 hotfixBranchName = gitFlowConfig.getHotfixBranchPrefix()
                         + branchName + "/" + branchVersionPart;
@@ -214,16 +229,34 @@ public class GitFlowHotfixStartMojo extends AbstractGitFlowMojo {
                         "Hotfix branch with that name already exists. Cannot start hotfix.");
             }
 
-            // git checkout -b hotfix/... master
-            gitCreateAndCheckout(hotfixBranchName, branchName);
+            gitCreateBranch(hotfixBranchName, branchName);
+
+            // increment version of support
+            if (useSupportHasDevelop) {
+
+                GitFlowVersionInfo versionInfo = new GitFlowVersionInfo(currentVersion);
+
+                String nextSnapshotVersion = versionInfo.nextSnapshotVersion();
+
+                mvnSetVersions(nextSnapshotVersion);
+
+                Map<String, String> properties = new HashMap<String, String>();
+                properties.put("version", nextSnapshotVersion);
+
+                gitCommit(commitMessages.getReleaseFinishMessage(), properties);
+            }
+
+            gitCheckout(hotfixBranchName);
 
             // execute if version changed
             if (!version.equals(currentVersion)) {
+
                 String projectVersion = version;
+
                 if (useSnapshotInHotfix && !ArtifactUtils.isSnapshot(version)) {
                     projectVersion = version + "-SNAPSHOT";
                 }
-                
+
                 // mvn versions:set -DnewVersion=... -DgenerateBackupPoms=false
                 mvnSetVersions(projectVersion);
 

@@ -32,7 +32,7 @@ import org.codehaus.plexus.util.cli.CommandLineException;
 
 /**
  * The git flow hotfix finish mojo.
- * 
+ *
  */
 @Mojo(name = "hotfix-finish", aggregator = true)
 public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
@@ -47,7 +47,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
 
     /**
      * Whether to skip calling Maven test goal before merging the branch.
-     * 
+     *
      * @since 1.0.5
      */
     @Parameter(property = "skipTestProject", defaultValue = "false")
@@ -55,7 +55,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
 
     /**
      * Whether to push to the remote.
-     * 
+     *
      * @since 1.3.0
      */
     @Parameter(property = "pushRemote", defaultValue = "true")
@@ -64,7 +64,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
     /**
      * Maven goals to execute in the hotfix branch before merging into the
      * production or support branch.
-     * 
+     *
      * @since 1.8.0
      */
     @Parameter(property = "preHotfixGoals")
@@ -72,7 +72,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
 
     /**
      * Maven goals to execute in the release or support branch after the hotfix.
-     * 
+     *
      * @since 1.8.0
      */
     @Parameter(property = "postHotfixGoals")
@@ -80,7 +80,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
 
     /**
      * Hotfix version to use in non-interactive mode.
-     * 
+     *
      * @since 1.9.0
      */
     @Parameter(property = "hotfixVersion")
@@ -88,7 +88,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
 
     /**
      * Whether to make a GPG-signed tag.
-     * 
+     *
      * @since 1.9.0
      */
     @Parameter(property = "gpgSignTag", defaultValue = "false")
@@ -96,12 +96,20 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
 
     /**
      * Whether this is use snapshot in hotfix.
-     * 
+     *
      * @since 1.10.0
      */
-    @Parameter(defaultValue = "false")
+    @Parameter(property = "useSnapshotInHotfix", defaultValue = "false")
     protected boolean useSnapshotInHotfix;
-    
+
+    /**
+     * Whether we use the support has a development branch
+     *
+     * @since 1.10.1
+     */
+    @Parameter(property = "useSupportHasDevelop", defaultValue = "false")
+    protected boolean useSupportHasDevelop;
+
     /** {@inheritDoc} */
     @Override
     public void execute() throws MojoExecutionException, MojoFailureException {
@@ -175,8 +183,11 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
             }
 
             String currentHotfixVersion = getCurrentProjectVersion();
+            String commitVersion = currentHotfixVersion;
+
             if (useSnapshotInHotfix && ArtifactUtils.isSnapshot(currentHotfixVersion)) {
-                String commitVersion = currentHotfixVersion.replace("-" + Artifact.SNAPSHOT_VERSION, "");
+
+                commitVersion = currentHotfixVersion.replace("-" + Artifact.SNAPSHOT_VERSION, "");
 
                 mvnSetVersions(commitVersion);
 
@@ -186,9 +197,52 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
                 gitCommit(commitMessages.getHotfixStartMessage(), properties);
             }
 
+            String nextSnapshotVersion = null;
+
             if (supportBranchName != null) {
+
                 gitCheckout(supportBranchName);
+
+                // if a support branch exists we can have the situation where
+                // the support is being used as a concurrent development branch,
+                // for a different client for example, in parallel with the
+                // development branch. In this case the version is normally a
+                // SNAPSHOT and each time we do releases we want to increment
+                // the SNAPSHOT version. -> useSupportHasDevelop
+                if (useSupportHasDevelop) {
+
+                    // set hotfix version into support to avoid merge
+                    // conflicts
+                    mvnSetVersions(commitVersion);
+
+                    // commit the temporary version
+                    gitCommit("update to hotfix version to avoid merge conflits");
+
+                    // create version info object for the hotfix version
+                    GitFlowVersionInfo hotfixVersionInfo = new GitFlowVersionInfo(commitVersion);
+
+                    String supportVersion = getCurrentProjectVersion();
+
+                    if (ArtifactUtils.isSnapshot(supportVersion)) {
+                        supportVersion = supportVersion.replace("-" + Artifact.SNAPSHOT_VERSION, "");
+                    }
+
+                    // create version info object for the support version
+                    GitFlowVersionInfo supportVersionInfo = new GitFlowVersionInfo(supportVersion);
+
+                    // if the support version is superior to the hotfix one
+                    // we want to keep that version in support
+                    if (supportVersionInfo.compareTo(hotfixVersionInfo) > 0) {
+                        nextSnapshotVersion = supportVersionInfo.getSnapshotVersionString();
+                    }
+                    else {
+                        nextSnapshotVersion = hotfixVersionInfo.nextSnapshotVersion();
+                    }
+
+                }
+
             } else {
+
                 // git checkout master
                 gitCheckout(gitFlowConfig.getProductionBranch());
             }
@@ -196,10 +250,10 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
             // git merge --no-ff hotfix/...
             gitMergeNoff(hotfixBranchName);
 
-            final String currentVersion = getCurrentProjectVersion();
-
             if (!skipTag) {
-                String tagVersion = currentVersion;
+
+                String tagVersion = commitVersion;
+
                 if ((tychoBuild || useSnapshotInHotfix) && ArtifactUtils.isSnapshot(tagVersion)) {
                     tagVersion = tagVersion
                             .replace("-" + Artifact.SNAPSHOT_VERSION, "");
@@ -211,6 +265,17 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
                 // git tag -a ...
                 gitTag(gitFlowConfig.getVersionTagPrefix() + tagVersion,
                         commitMessages.getTagHotfixMessage(), gpgSignTag, properties);
+            }
+
+            if (supportBranchName != null && useSupportHasDevelop) {
+
+                mvnSetVersions(nextSnapshotVersion);
+
+                Map<String, String> properties = new HashMap<String, String>();
+                properties.put("version", nextSnapshotVersion);
+
+                gitCommit(commitMessages.getSuportHotfixFinishMessage(),
+                        properties);
             }
 
             // maven goals after merge
@@ -225,6 +290,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
                     gitFlowConfig.getReleaseBranchPrefix(), true);
 
             if (supportBranchName == null) {
+
                 // if release branch exists merge hotfix changes into it
                 if (StringUtils.isNotBlank(releaseBranch)) {
                     // git checkout release
@@ -232,32 +298,38 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
                     // git merge --no-ff hotfix/...
                     gitMergeNoff(hotfixBranchName);
                 } else {
-                    GitFlowVersionInfo developVersionInfo = new GitFlowVersionInfo(
-                            currentVersion);
+
+                    // create version info object for the hotfix version
+                    GitFlowVersionInfo hotfixVersionInfo = new GitFlowVersionInfo(commitVersion);
+
+                    // for now, the next snapshot version to set in develop
+                    // branch is the the hotfix incremented by 1
+                    nextSnapshotVersion = hotfixVersionInfo.nextSnapshotVersion();
+
                     if (notSameProdDevName()) {
+
                         // git checkout develop
                         gitCheckout(gitFlowConfig.getDevelopmentBranch());
 
-                        developVersionInfo = new GitFlowVersionInfo(getCurrentProjectVersion());
+                        // create version info object for the develop version
+                        GitFlowVersionInfo developVersionInfo = new GitFlowVersionInfo(getCurrentProjectVersion());
 
-                        // set version to avoid merge conflict
-                        mvnSetVersions(currentVersion);
-                        gitCommit("update to hotfix version");
+                        // set hotfix version into develop to avoid merge
+                        // conflict
+                        mvnSetVersions(commitVersion);
+
+                        // commit the temporary version
+                        gitCommit("update to hotfix version to avoid merge conflits");
 
                         // git merge --no-ff hotfix/...
                         gitMergeNoff(hotfixBranchName);
 
-                        // which version to increment
-                        GitFlowVersionInfo hotfixVersionInfo = new GitFlowVersionInfo(
-                                currentVersion);
-                        if (developVersionInfo
-                                .compareTo(hotfixVersionInfo) < 0) {
-                            developVersionInfo = hotfixVersionInfo;
+                        // if the develop version is superior to the hotfix one
+                        // we want to keep it
+                        if (developVersionInfo.compareTo(hotfixVersionInfo) > 0) {
+                            nextSnapshotVersion = developVersionInfo.getSnapshotVersionString();
                         }
                     }
-
-                    // get next snapshot version
-                    final String nextSnapshotVersion = developVersionInfo.getSnapshotVersionString();
 
                     if (StringUtils.isBlank(nextSnapshotVersion)) {
                         throw new MojoFailureException(
@@ -328,7 +400,7 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
         List<String> numberedList = new ArrayList<String>();
         StringBuilder str = new StringBuilder("Hotfix branches:").append(LS);
         for (int i = 0; i < branches.length; i++) {
-            str.append((i + 1) + ". " + branches[i] + LS);
+            str.append(i + 1 + ". " + branches[i] + LS);
             numberedList.add(String.valueOf(i + 1));
         }
         str.append("Choose hotfix branch to finish");

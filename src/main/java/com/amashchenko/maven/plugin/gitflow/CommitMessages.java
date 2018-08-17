@@ -17,7 +17,7 @@ package com.amashchenko.maven.plugin.gitflow;
 
 /**
  * Git commit messages.
- * 
+ *
  */
 public class CommitMessages {
     private String featureStartMessage;
@@ -32,6 +32,14 @@ public class CommitMessages {
     private String tagHotfixMessage;
     private String tagReleaseMessage;
 
+    private String suportStartMessage;
+
+    private String suportHotfixFinishMessage;
+
+    private String updateDevToAvoidConflitsMessage;
+
+    private String updateDevBackPreMergeStateMessage;
+
     public CommitMessages() {
         featureStartMessage = "update versions for feature branch";
         featureFinishMessage = "update versions for development branch";
@@ -42,8 +50,83 @@ public class CommitMessages {
         releaseStartMessage = "update versions for release";
         releaseFinishMessage = "update for next development version";
 
+        suportStartMessage = "update versions for support";
+        suportHotfixFinishMessage = "update for next support version";
+
         tagHotfixMessage = "tag hotfix";
         tagReleaseMessage = "tag release";
+
+        updateDevToAvoidConflitsMessage = "updating develop poms to master version to avoid merge conflits";
+        updateDevBackPreMergeStateMessage = "updating develop poms version back to pre merge state";
+
+    }
+
+    /**
+     * @return the suportStartMessage
+     */
+    public String getSuportStartMessageMessage() {
+
+        return suportStartMessage;
+    }
+
+    /**
+     * @param suportStartMessage
+     *            the suportStartMessage to set
+     */
+    public void setSuportStartMessageMessage(String suportStartMessage) {
+
+        this.suportStartMessage = suportStartMessage;
+    }
+
+    /**
+     * @return the suportHotfixFinishMessage
+     */
+    public String getSuportHotfixFinishMessage() {
+
+        return suportHotfixFinishMessage;
+    }
+
+    /**
+     * @param suportHotfixFinishMessage
+     *            the suportHotfixFinishMessage to set
+     */
+    public void setSuportHotfixFinishMessage(String suportHotfixFinishMessage) {
+
+        this.suportHotfixFinishMessage = suportHotfixFinishMessage;
+    }
+
+    /**
+     * @return the updateDevToAvoidConflitsMessage
+     */
+    public String getUpdateDevToAvoidConflitsMessage() {
+
+        return updateDevToAvoidConflitsMessage;
+    }
+
+    /**
+     * @param updateDevToAvoidConflitsMessage
+     *            the updateDevToAvoidConflitsMessage to set
+     */
+    public void setUpdateDevToAvoidConflitsMessage(String updateDevToAvoidConflitsMessage) {
+
+        this.updateDevToAvoidConflitsMessage = updateDevToAvoidConflitsMessage;
+    }
+
+    /**
+     * @return the updateDevBackPreMergeStateMessage
+     */
+    public String getUpdateDevBackPreMergeStateMessage() {
+
+        return updateDevBackPreMergeStateMessage;
+    }
+
+    /**
+     * @param updateDevBackPreMergeStateMessage
+     *            the updateDevBackPreMergeStateMessage to set
+     */
+    public void setUpdateDevBackPreMergeStateMessage(String updateDevBackPreMergeStateMessage) {
+
+        this.updateDevBackPreMergeStateMessage = updateDevBackPreMergeStateMessage;
     }
 
     /**
