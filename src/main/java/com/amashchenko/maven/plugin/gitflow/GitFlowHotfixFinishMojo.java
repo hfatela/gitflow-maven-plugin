@@ -267,6 +267,11 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
                         commitMessages.getTagHotfixMessage(), gpgSignTag, properties);
             }
 
+            // maven goals after merge
+            if (StringUtils.isNotBlank(postHotfixGoals)) {
+                mvnRun(postHotfixGoals);
+            }
+
             if (supportBranchName != null && useSupportHasDevelop) {
 
                 mvnSetVersions(nextSnapshotVersion);
@@ -276,11 +281,6 @@ public class GitFlowHotfixFinishMojo extends AbstractGitFlowMojo {
 
                 gitCommit(commitMessages.getSuportHotfixFinishMessage(),
                         properties);
-            }
-
-            // maven goals after merge
-            if (StringUtils.isNotBlank(postHotfixGoals)) {
-                mvnRun(postHotfixGoals);
             }
 
             // check whether release branch exists
